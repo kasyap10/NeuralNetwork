@@ -79,7 +79,7 @@ def vectorized_result(j):
     return e
 
 class NeuralNetwork:
-    def __init__(self, layers, learningrate, lmb, sample_size, training_data, epochs, probability=0.5):
+    def __init__(self, layers, learningrate=0, lmb=0, sample_size=0, training_data=0, epochs=0, probability=0.5):
         self.layers = layers
         self.learningrate = learningrate
         self.sample_size = sample_size
@@ -88,26 +88,33 @@ class NeuralNetwork:
         self.probability = probability
         self.weights = [.1*np.random.randn(layers[i+1], layers[i]) for i in range(0, len(layers) - 1)]
         self.biases = [np.random.randn(layers[i]) for i in range(1, len(layers))] #Problematic?
-        for j in range(0,epochs) :
-            np.random.shuffle(training_data)
-            for i in len(training_data):
-                tdarray = np.array(training_data[i:i+sample_size])
-                self.train(tdarray)
+
+        #for j in range(0,epochs) :
+         #   np.random.shuffle(training_data)
+          #  for i in len(training_data):
+           #     tdarray = np.array(training_data[i:i+sample_size])
+            #    self.train(tdarray)
 
     def run(self, input):
-        activations = input
+        activations = []
+        activations.append(input)
         for i in range(0, len(self.weights)):
-            activations.append(self.max(self.weights[i] @ input + self.biases[i]))
+            activations.append(self.max(activations[i]@np.transpose(self.weights[i]) + self.biases[i]))
         return activations
 
     def train(self, td):
         inputs = np.array([example[0] for example in td])
         outputs = np.array([example[1] for example in td])
         activations = np.array(self.run(inputs))
+        #Below part is where bias gradient is calculated
         del_b = np.array()
         del_b.append((1/activations[-1].size)*(activations[-1]-outputs[-1])*self.max_prime(activations[-1])) #Bias change of output with Hadamard, hopefully?
-        del_b.append([(self.weights[i]@del_b[i])*self.generate_random_matrix(self.weights[i]@del_b[i],self.probability) for i in range(self.layers,1,-1)]) #bias for hidden layers
-        
+        del_b.extend([(np.transpose(self.weights[i])@np.tile(del_b[i].transpose(), (self.layers[i], 1)))*np.random.binomial(1,self.probability,size=(np.shape(self.layers[i-1],self.layers[i]))) for i in range(self.layers,1,-1)]) #bias for hidden layers...what to do about input layer? Also extend vs append
+        #remember to divide sum by number of NONZERO entries
+        #now for the weights
+        #Multiply activation matrix by del_b matrix, hopefully the zeros in del_b will replace the Hadamard 1's and 0's matrix
+        del_w = [activations[i]@del_b[i] for i in range(self.layers,-1)] #don't forget to divide by # of nonzero weights
+
     def sigmoid(self,z):
         f = [1/(1+np.e**-i) for i in z]
         return f
@@ -145,4 +152,7 @@ t, v, test = load_data_wrapper()
 #plot.imshow(t[1].reshape((28,28)), cmap=cm.Greys_r)
 #plot.show()
 #print('The input' + str(t[0][0]))
-
+n = NeuralNetwork([2,2,3])
+print(n.run(np.array([[0.0,1.0],[1.0,0.0],[1.0,1.0]])))
+print("Biases:")
+print([np.transpose(bias) for bias in n.biases])

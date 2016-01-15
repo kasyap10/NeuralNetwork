@@ -5,6 +5,7 @@ import gzip
 import pickle
 import matplotlib.cm as cm
 import matplotlib.pyplot as plot
+import os
 
 
 #Add for sure: ReLU (Max), L2, MSE (not ideal but not much other choice), Mini_batch matrix
@@ -33,7 +34,7 @@ def load_data():
     That's done in the wrapper function ``load_data_wrapper()``, see
     below.
     """
-    f = gzip.open('C:/Users/kasya_000/neural-networks-and-deep-learning/data/mnist.pkl.gz', 'rb')
+    f = gzip.open(os.getcwd() + '/mnist.pkl.gz', 'rb')
     training_data, validation_data, test_data = pickle.load(f, encoding='latin1')
     f.close()
     return (training_data, validation_data, test_data)

@@ -6,6 +6,7 @@ import pickle
 import matplotlib.cm as cm
 import matplotlib.pyplot as plot
 import os
+import pdb
 
 
 #Add for sure: ReLU (Max), L2, MSE (not ideal but not much other choice), Mini_batch matrix

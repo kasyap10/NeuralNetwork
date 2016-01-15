@@ -5,6 +5,7 @@ import gzip
 import pickle
 import matplotlib.cm as cm
 import matplotlib.pyplot as plot
+import os
 
 
 #Add for sure: ReLU (Max), L2, MSE (not ideal but not much other choice), Mini_batch matrix
@@ -33,7 +34,7 @@ def load_data():
     That's done in the wrapper function ``load_data_wrapper()``, see
     below.
     """
-    f = gzip.open('C:/Users/kasya_000/neural-networks-and-deep-learning/data/mnist.pkl.gz', 'rb')
+    f = gzip.open(os.getcwd() + '/mnist.pkl.gz', 'rb')
     training_data, validation_data, test_data = pickle.load(f, encoding='latin1')
     f.close()
     return (training_data, validation_data, test_data)
@@ -104,10 +105,13 @@ class NeuralNetwork:
         inputs = np.array([example[0] for example in td])
         outputs = np.array([example[1] for example in td])
         activations = np.array(self.run(inputs))
+        #Below part is where bias gradient is calculated
         del_b = np.array()
         del_b.append((1/activations[-1].size)*(activations[-1]-outputs[-1])*self.max_prime(activations[-1])) #Bias change of output with Hadamard, hopefully?
-        del_b.append([(self.weights[i]@del_b[i])*self.generate_random_matrix(self.weights[i]@del_b[i],self.probability) for i in range(self.layers,1,-1)]) #bias for hidden layers
-        
+        del_b.append([(self.weights[i]@np.tiles(del_b[i], (self.layers[i], 1)))*self.generate_random_matrix(self.weights[i]@del_b[i],self.probability) for i in range(self.layers,-1)]) #bias for hidden layers...what to do about input layer?
+        #remember to divide sum by number of NONZERO entries
+        #now for the weights
+
     def sigmoid(self,z):
         f = [1/(1+np.e**-i) for i in z]
         return f

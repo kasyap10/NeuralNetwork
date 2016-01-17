@@ -92,7 +92,7 @@ class NeuralNetwork:
         self.probability = probability
         self.weights = [.1 * np.random.randn(layers[i + 1], layers[i]) for i in range(0, len(layers) - 1)]
         self.biases = [np.random.randn(layers[i]) for i in range(1, len(layers))]  # Problematic?
-
+        self.training_data = training_data
         # for j in range(0,epochs) :
         #   np.random.shuffle(training_data)
         #  for i in len(training_data):
@@ -117,17 +117,19 @@ class NeuralNetwork:
         # Below part is where bias gradient is calculated
         del_b = []
         del_b.append((1 / activations[-1].size) * (activations[-1] - outputs[-1]) * self.max_prime(activations[-1]))  # Bias change of output with Hadamard, hopefully?
-        del_b.extend([(np.transpose(self.weights[i]) @ np.tile(del_b[i].transpose(), (self.layers[i], 1))) * randM[i] for i
+        del_b.extend([(np.transpose(self.weights[i]) @ np.tile(del_b[i].transpose(), (self.layers[i], 1))) * self.max_prime(activations[i]) for i
                  in range(self.layers, 1,
-                          -1)])  # bias for hidden layers...what to do about input layer? Also extend vs append
+                          -1)])  # bias for hidden layers, no need to multiply by dropout matrix because the matrix is in activations(?) Also extend vs append
         # remember to divide sum by number of NONZERO entries
         # now for the weights
         # Multiply activation matrix by del_b matrix, hopefully the zeros in del_b will replace the Hadamard 1's and 0's matrix
         del_w = [activations[i] @ del_b[i] for i in
                  range(self.layers, 1, -1)]  # don't forget to divide by # of nonzero weights
-        # TODO: Divide del_w by the number of nonzero entries to get avg gradient
-        # TODO: Update the weights and biases, taking into account L2
-
+        avg = [[1/index for index in np.nditer(randM[i-1]@randM[i]) if index!=0] for i in range(self.layers,1,-1)]
+        del_w = [avg[i]*del_w[i] for i in range(0, len(del_w))]
+        del_b = [np.sum(del_b[i],axis=1)*np.sum(randM[i],axis=1)**-1 for i in range(randM) if 0 not in np.sum(randM[i])] #Don't know if that last part is strictly necessary...
+        self.weights = [self.weights[i] - self.learningrate*del_w[i] + (self.lmb/float(len(self.training_data)))*self.weights[i] for i in range(self.layers)]
+        self.biases = [self.biases[i] - self.learningrate*del_b[i] for i in range(self.layers)]
     def sigmoid(self, z):
         f = [1 / (1 + np.e ** -i) for i in z]
         return f

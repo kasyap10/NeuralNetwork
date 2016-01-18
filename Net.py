@@ -8,7 +8,7 @@ import matplotlib.pyplot as plot
 import os
 
 
-# Add for sure: ReLU (Max), L2, MSE (not ideal but not much other choice), Mini_batch matrix
+# Add for sure    : ReLU (Max), L2, MSE (not ideal but not much other choice), Mini_batch matrix
 # Maybe: Momentum, Dropout
 # Future: Softmax + ReLU, perhaps?
 def load_data():
@@ -93,43 +93,50 @@ class NeuralNetwork:
         self.weights = [.1 * np.random.randn(layers[i + 1], layers[i]) for i in range(0, len(layers) - 1)]
         self.biases = [np.random.randn(layers[i]) for i in range(1, len(layers))]  # Problematic?
         self.training_data = training_data
-        # for j in range(0,epochs) :
-        #   np.random.shuffle(training_data)
-        #  for i in len(training_data):
-        #     tdarray = np.array(training_data[i:i+sample_size])
-        #    self.train(tdarray)
-
-    def run(self, inp, randM=None):
+        for j in range(0, epochs):
+            np.random.shuffle(training_data)
+            for i in range(len(training_data)):
+                tdarray = np.array(training_data[i:i + sample_size])
+                self.train(tdarray)
+        self.weights*=self.probability
+    def run(self, inp, dropout=None):
         activations = []
         activations.append(inp)
         for i in range(0, len(self.weights)):
             activations.append(self.max(activations[i] @ np.transpose(self.weights[i]) + self.biases[i]))
-            if randM is not None:
-                activations[i] *= randM[i]
+            if 0<i<(len(self.weights)-1) and dropout is not None: #Dropping out only the hidden layers
+                activations[i] *= dropout[i-1]
         return activations
 
     def train(self, td):
-        inputs = np.array([example[0] for example in td])
-        outputs = np.array([example[1] for example in td])
-        randM = [np.random.binomial(1, self.probability, size=(np.shape(self.layers[i - 1], self.layers[i]))) for i in
-                 range(len(self.layers), 1, -1)]
-        activations = np.array(self.run(inputs), randM)
+        inputs = np.column_stack(np.array(td).transpose()[0]).transpose()
+        outputs = np.column_stack(np.array(td).transpose()[1]).transpose()
+        randM = [np.random.binomial(1, self.probability, size=(self.layers[i], self.layers[i-1])) for i in
+                 range(len(self.layers) - 1, 1, -1)]
+        activations = self.run(inputs, dropout=randM)
         # Below part is where bias gradient is calculated
         del_b = []
-        del_b.append((1 / activations[-1].size) * (activations[-1] - outputs[-1]) * self.max_prime(activations[-1]))  # Bias change of output with Hadamard, hopefully?
-        del_b.extend([(np.transpose(self.weights[i]) @ np.tile(del_b[i].transpose(), (self.layers[i], 1))) * self.max_prime(activations[i]) for i
-                 in range(self.layers, 1,
-                          -1)])  # bias for hidden layers, no need to multiply by dropout matrix because the matrix is in activations(?) Also extend vs append
+        del_b.append((1 / activations[-1][0].size) * (activations[-1] - outputs[-1]) * np.vectorize(self.max_prime)(
+                activations[-1]))  # Bias change of output with Hadamard, hopefully?
+        for i in range(len(self.layers)-1,0,-1) :
+            del_b.append((np.transpose(self.weights[i-1]) @ np.tile(del_b[len(self.layers)-1-i].transpose(),
+                                                               (self.layers[i], 1))) * np.vectorize(self.max_prime)(activations[i]))
+                       # bias for hidden layers, no need to multiply by dropout matrix because the matrix is in activations(?) Also extend vs append
         # remember to divide sum by number of NONZERO entries
         # now for the weights
         # Multiply activation matrix by del_b matrix, hopefully the zeros in del_b will replace the Hadamard 1's and 0's matrix
         del_w = [activations[i] @ del_b[i] for i in
-                 range(self.layers, 1, -1)]  # don't forget to divide by # of nonzero weights
-        avg = [[1/index for index in np.nditer(randM[i-1]@randM[i]) if index!=0] for i in range(self.layers,1,-1)]
-        del_w = [avg[i]*del_w[i] for i in range(0, len(del_w))]
-        del_b = [np.sum(del_b[i],axis=1)*np.sum(randM[i],axis=1)**-1 for i in range(randM) if 0 not in np.sum(randM[i])] #Don't know if that last part is strictly necessary...
-        self.weights = [self.weights[i] - self.learningrate*del_w[i] + (self.lmb/float(len(self.training_data)))*self.weights[i] for i in range(self.layers)]
-        self.biases = [self.biases[i] - self.learningrate*del_b[i] for i in range(self.layers)]
+                 range(self.layers - 1, 0, -1)]  # don't forget to divide by # of nonzero weights
+        avg = [[1 / index for index in np.nditer(randM[i - 1] @ randM[i]) if index != 0] for i in
+               range(self.layers - 1, 1, -1)]
+        del_w = [avg[i] * del_w[i] for i in range(0, len(del_w))]
+        del_b = [np.sum(del_b[i], axis=1) * np.sum(randM[i], axis=1) ** -1 for i in range(randM) if
+                 0 not in np.sum(randM[i])]  # Don't know if that last part is strictly necessary...
+        self.weights = [
+            self.weights[i] - self.learningrate * del_w[i] + (self.lmb / float(len(self.training_data))) * self.weights[
+                i] for i in range(self.layers)]
+        self.biases = [self.biases[i] - self.learningrate * del_b[i] for i in range(self.layers)]
+
     def sigmoid(self, z):
         f = [1 / (1 + np.e ** -i) for i in z]
         return f
@@ -161,6 +168,7 @@ class NeuralNetwork:
     def write(self, link):
         np.savetxt(link, self.biases[0], delimiter=",")
 
+
 # print (n.weights)
 # print (n.biases)
 
@@ -169,12 +177,10 @@ class NeuralNetwork:
 # print (output)
 # print ("Time: " + str(time.time() - startime))
 t, v, test = load_data_wrapper()
-
 # plot.imshow(t[1].reshape((28,28)), cmap=cm.Greys_r)
 # plot.show()
 # print('The input' + str(t[0][0]))
-n = NeuralNetwork([2, 2, 3])
+n = NeuralNetwork([784, 30, 10], 0.05, .1, 10, t, 100)
 # print(n.run(np.array([[0.0,1.0],[1.0,0.0],[1.0,1.0]])))
 # print("Biases:")
 # print([np.transpos# e(bias) for bias in n.biases])
-n.write('file.csv')

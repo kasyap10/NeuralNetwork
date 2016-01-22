@@ -103,7 +103,8 @@ class NeuralNetwork:
                 if len(tdarray) < sample_size :
                     break
                 self.train(tdarray)
-        self.weights *= self.probability
+        for weight_layer in self.weights :
+            weight_layer *= self.probability
 
     def run(self, inp, dropout=None):
         activations = []

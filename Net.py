@@ -4,7 +4,7 @@ import time
 import gzip
 import pickle
 import matplotlib.cm as cm
-import matplotlib.pyplot as plot
+import matplotlib.pyplot as plt
 import os
 from numpy import inf
 
@@ -12,7 +12,7 @@ from numpy import inf
 # Add for sure    : ReLU (Max), L2, MSE (not ideal but not much other choice), Mini_batch matrix
 # Maybe: Momentum, Dropout
 # Future: Softmax + ReLU, perhaps?
-
+error_list = []
 def load_data():
     """Return the MNIST data as a tuple containing the training data,
     the validation data, and the test data.
@@ -85,14 +85,14 @@ def vectorized_result(j):
 
 
 class NeuralNetwork:
-    def __init__(self, layers, learningrate=0, lmb=0, sample_size=0, training_data=0, epochs=0, probability=0.5):
+    def __init__(self, layers, learningrate=0, lmb=0.0, sample_size=0, training_data=0, epochs=0, probability=0.5):
         self.layers = layers
         self.learningrate = learningrate
         self.sample_size = sample_size
         self.lmb = lmb
         self.epochs = epochs
         self.probability = probability
-        self.weights = [.1 * np.random.randn(layers[i + 1], layers[i]) for i in range(0, len(layers) - 1)]
+        self.weights = [.1*np.random.randn(layers[i + 1], layers[i]) for i in range(0, len(layers) - 1)]
         self.biases = [np.random.randn(layers[i]) for i in range(1, len(layers))]  # Problematic?
         self.training_data = training_data
         for j in range(0, epochs):
@@ -103,9 +103,10 @@ class NeuralNetwork:
                 if len(tdarray) < sample_size :
                     break
                 self.train(tdarray)
+            #print("Epoch number " + str(j) + " complete")
         for weight_layer in self.weights :
             weight_layer *= self.probability
-
+        plt.show()
     def run(self, inp, dropout=None):
         activations = []
         activations.append(inp)
@@ -139,8 +140,7 @@ class NeuralNetwork:
                  range(len(del_b))]  # don't forget to divide by # of nonzero weights
         avg = [1 / (randM[i].transpose() @ randM[i + 1]).transpose() for i in
                range(len(randM) - 1)]
-        for x in avg:
-            x[np.isinf(x)] = 0
+        np.nan_to_num(avg)
         del_w = [avg[i] * del_w[i] for i in range(0, len(del_w))]
         del_b = [np.array(np.sum(del_b[i], axis=0)) * 1 / (np.array(np.sum(randM[i + 1], axis=0))) for i in
                  range(len(del_b))]  # Don't know if that last part is strictly necessary...
@@ -149,7 +149,9 @@ class NeuralNetwork:
             self.weights[
                 i] for i in range(len(self.weights))]
         self.biases = [self.biases[i] - self.learningrate * del_b[i] for i in range(len(self.biases))]
-
+        global error_list
+        error_list.append(self.mean_squared_error(activations[-1],outputs[-1]))
+        plt.plot(error_list)
     def sigmoid(self, z):
         f = [1 / (1 + np.e ** -i) for i in z]
         return f
@@ -172,7 +174,7 @@ class NeuralNetwork:
         return (1 / o.size) * np.sum(np.nan_to_num(-e * np.log(o) - (1 - e) * np.log(1 - o)))
 
     def mean_squared_error(self, o, e):
-        return (.5 / o.size) * np.sum((o - e) ^ 2)
+        return (.5 / o.shape[0]) * np.sum(np.sum((o - e) ** 2,axis=1)*1/self.sample_size)
 
     def generate_rand_matrix(self, arr, p):
         matrix = [[1 if np.random.rand() < p else 0 for elem in row] for row in np.zeros[arr.shape]]
@@ -180,6 +182,15 @@ class NeuralNetwork:
 
     def write(self, link):
         np.savetxt(link, self.biases[0], delimiter=",")
+
+def accuracy_test(net, v):
+    num_correct = 0
+    for tset in v:
+        output = net.run(np.array(tset[0]).transpose())
+        max_index = list(output).index(max(list(output)))
+        if max_index == tset[1] :
+            num_correct+=1 #Misleading, but error actually tracks number correct
+    return (num_correct/len(v))
 
 
 # print (n.weights)
@@ -193,7 +204,10 @@ t, v, test = load_data_wrapper()
 # plot.imshow(t[1].reshape((28,28)), cmap=cm.Greys_r)
 # plot.show()
 # print('The input' + str(t[0][0]))
-n = NeuralNetwork([784, 30, 10], 0.05, .1, 15, t, 100)
-# print(n.run(np.array([[0.0,1.0],[1.0,0.0],[1.0,1.0]])))
+#val_data = np.array(np.column_stack(v).transpose()[0]).transpose()
+#print(val_data)
+n = NeuralNetwork([784, 20, 10], 0.005, .1, 30, t, 10,0.75)
+print(n.run(v[0][0]).transpose())
 # print("Biases:")
-# print([np.transpos# e(bias) for bias in n.biases])
+# print([np.transpos# e(bias) for bias in n.biases]
+print(str(accuracy_test(n,v)))

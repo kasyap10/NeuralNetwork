@@ -6,6 +6,7 @@ import pickle
 import matplotlib.cm as cm
 import matplotlib.pyplot as plt
 import os
+import logging
 from numpy import inf
 
 # Add for sure    : ReLU (Max), L2, MSE (not ideal but not much other choice), Mini_batch matrix
@@ -85,6 +86,7 @@ def vectorized_result(j):
     return e
 
 
+# logging.disable(10)
 class NeuralNetwork:
     def __init__(self, layers, learningrate=0.0, lmb=0.0, sample_size=0, training_data=0, epochs=0, probability=0.5):
         self.layers = layers
@@ -93,7 +95,7 @@ class NeuralNetwork:
         self.lmb = lmb
         self.epochs = epochs
         self.dropout_probability = probability
-        self.weights = [.1*np.random.random_sample((layers[i + 1], layers[i])) for i in range(0, len(layers) - 1)]
+        self.weights = [.1 * np.random.random_sample((layers[i + 1], layers[i])) for i in range(0, len(layers) - 1)]
         self.biases = [np.random.randn(layers[i]) for i in
                        range(1, len(layers))]  # Problematic?  No biases for input layer
         self.training_data = training_data
@@ -108,10 +110,10 @@ class NeuralNetwork:
                     break
                 self.backprop(tdarray)
                 # print("Epoch number " + str(j) + " complete")
-        if self.dropout_probability is not None and self.dropout_probability < 1.0 :
+        if self.dropout_probability is not None and self.dropout_probability < 1.0:
             for weight_layer in self.weights:
                 weight_layer *= 1 - self.dropout_probability
-        plt.show()
+                # plt.show()
 
     def run(self, inp, dropout=None):
         activations = []
@@ -142,23 +144,34 @@ class NeuralNetwork:
         # now for the weights
         del_b = list(reversed(del_b))
         # Multiply activation matrix by del_b matrix, hopefully the zeros in del_b will replace the Hadamard 1's and 0's matrix
-        del_w = [(1/self.sample_size)*(del_b[i].transpose() @ activations[i]) for i in
-                 range(len(del_b))]  # don't forget to divide by sample size
-        #avg = [1 / (randM[i].transpose() @ randM[i + 1]).transpose() for i in
-               #range(len(randM) - 1)]
-        #np.nan_to_num(avg)
-        #del_w = [avg[i] * del_w[i] for i in range(0, len(del_w))]
-        #del_b = [np.array(np.sum(del_b[i], axis=0)) * 1 / (np.array(np.sum(randM[i + 1], axis=0))) for i in
-         #        range(len(del_b))]  # Don't know if that last part is strictly necessary...
-        del_b = [(1/self.sample_size)*np.sum(del_b[i],axis=0) for i in range(len(del_b))]
+        del_w = [(del_b[i].transpose() @ activations[i]) for i in
+                 range(len(del_b))]  # don't forget to divide by sample size, you just removed that
+        # avg = [1/((randM[i].transpose() @ randM[i + 1]).transpose()) for i in
+        # range(len(randM) - 1)]
+        weights_dropout = [[column @ row for row,column in zip(randM[i],randM[i+1])] for i in
+                           range(len(randM))]  # This is probably completely incorrect
+        for entry in weights_dropout:
+            entry = 1 / (np.sum(entry))
+            del_w = [weights_dropout[i] * weights_dropout[i] for i in range(0, del_w)]
+        # for index in avg:
+        # index[index >= 1000000] = 0
+        # del_w = [avg[i] * del_w[i] for i in range(0, len(del_w))]
+        del_b = [np.array(np.sum(del_b[i], axis=0)) * 1 / (np.array(np.sum(randM[i + 1], axis=0))) for i in
+                 range(len(del_b))]  # Don't know if that last part is strictly necessary...
+        # del_b = [(1/self.sample_size)*np.sum(del_b[i],axis=0) for i in range(len(del_b))]
+        for layer in del_b:
+            layer[np.isnan(layer)] = 0
+        if (np.isnan(del_b[0])).any() == True:
+            os.system("pause")
         self.weights = [
-            self.weights[i] - (self.learningrate) * del_w[i] - (self.lmb / float(len(self.training_data))) *
+            self.weights[i] - (self.learningrate) * del_w[i] - (
+            self.lmb / math.floor(len(self.training_data) / self.sample_size)) *
             self.weights[
                 i] for i in range(0, len(self.weights))]
         self.biases = [self.biases[i] - (self.learningrate) * del_b[i] for i in range(len(self.biases))]
-        global error_list
-        error_list.append(self.mean_squared_error(activations[-1],outputs[-1]))
-        plt.plot(error_list)
+        # global error_list
+        # error_list.append(self.mean_squared_error(activations[-1],outputs[-1]))
+        # plt.plot(error_list)
 
     def sigmoid(self, z):
         f = 1 / (1 + np.e ** -z)
@@ -194,20 +207,19 @@ class NeuralNetwork:
     def write(self, link):
         np.savetxt(link, self.biases[0], delimiter=",")
 
+
 def load_data_from_file(link):
     f = open(link, 'r')
     raw_data = [str.rstrip("\n").split(";") for str in f.readlines()]
-    input_data = np.array([[np.array(float(index))for index in tset[0].split(',')] for tset in raw_data])
+    input_data = np.array([[np.array(float(index)) for index in tset[0].split(',')] for tset in raw_data])
     for set in input_data:
         set = set.transpose()
     output_data = np.array([float(tset[1]) for tset in raw_data])
-    final_data = list(zip(input_data,output_data))
-    #final_data.append(input_data)
-    #final_data.append(output_data)
+    final_data = list(zip(input_data, output_data))
+    # final_data.append(input_data)
+    # final_data.append(output_data)
     f.close()
     return final_data
-
-
 
 
 def accuracy_test(net, v):
@@ -235,13 +247,16 @@ t, v, test = load_data_wrapper()
 # print(val_data)
 print(v[0])
 toy_set = load_data_from_file('test.txt')
-n = NeuralNetwork([784,30, 10], 0.005, 0.1, 20, t, 10,1.0)
+n = NeuralNetwork([784, 30, 10], 0.0005, 0.1, 15, t, 10, 0.5)
 print("Initial training set accuracy is: " + str(accuracy_test(n, t)))
 print("Initial validation set accuracy is: " + str(accuracy_test(n, v)))
+start_time = time.time()
+print("Starting...")
 n.train()
-#print(n.run(toy_set[0][0]))
+print("Time taken: " + str(time.time() - start_time) + "seconds")
+print(n.run(v[0][0].transpose()))
 print(n.weights)
-#print("Biases:")
+# print("Biases:")
 # TODO: Try to check in-sample data to see overfitting
 # TODO: Check the graph of validation error at end, and maybe per epoch
 # TODO: Worst comes to worst, implement sigmoid

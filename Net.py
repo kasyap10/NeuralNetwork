@@ -148,11 +148,16 @@ class NeuralNetwork:
                  range(len(del_b))]  # don't forget to divide by sample size, you just removed that
         # avg = [1/((randM[i].transpose() @ randM[i + 1]).transpose()) for i in
         # range(len(randM) - 1)]
-        weights_dropout = [[column @ row for row,column in zip(randM[i],randM[i+1])] for i in
-                           range(len(randM))]  # This is probably completely incorrect
-        for entry in weights_dropout:
-            entry = 1 / (np.sum(entry))
-            del_w = [weights_dropout[i] * weights_dropout[i] for i in range(0, del_w)]
+        #for i in range(0,len(randM)-1):
+         #   for row,column in zip(randM[i],randM[i+1]):
+          #      row = row.reshape(1,row.shape[0])
+           #     column = column.reshape(column.shape[0],1)
+            #    thing = column@row
+        weights_dropout = [[column.reshape(column.shape[0],1) @ row.reshape(1,row.shape[0]) for row,column in zip(randM[i],randM[i+1])] for i in
+                           range(0,len(randM)-1)]  # This is probably completely incorrect
+        for i in range(len(weights_dropout)):
+            weights_dropout[i] = 1 / (add_arrays(weights_dropout[i]))
+            del_w[i] = del_w[i]*weights_dropout[i]
         # for index in avg:
         # index[index >= 1000000] = 0
         # del_w = [avg[i] * del_w[i] for i in range(0, len(del_w))]
@@ -207,7 +212,11 @@ class NeuralNetwork:
     def write(self, link):
         np.savetxt(link, self.biases[0], delimiter=",")
 
-
+def add_arrays(arrays):
+    x = np.zeros(arrays[0].shape)
+    for i,_ in enumerate(arrays):
+        x = x + arrays[i]
+    return x
 def load_data_from_file(link):
     f = open(link, 'r')
     raw_data = [str.rstrip("\n").split(";") for str in f.readlines()]
@@ -245,9 +254,9 @@ t, v, test = load_data_wrapper()
 # print('The input' + str(t[0][0]))
 # val_data = np.array(np.column_stack(v).transpose()[0]).transpose()
 # print(val_data)
-print(v[0])
+#print(v[0])
 toy_set = load_data_from_file('test.txt')
-n = NeuralNetwork([784, 30, 10], 0.0005, 0.1, 15, t, 10, 0.5)
+n = NeuralNetwork([784,30,10], 0.0005, 0.1, 15, t, 10, 0.5)
 print("Initial training set accuracy is: " + str(accuracy_test(n, t)))
 print("Initial validation set accuracy is: " + str(accuracy_test(n, v)))
 start_time = time.time()

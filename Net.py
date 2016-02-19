@@ -4,13 +4,17 @@ import time
 import gzip
 import pickle
 import matplotlib.cm as cm
-import matplotlib.pyplot as plot
+import matplotlib.pyplot as plt
 import os
+import logging
+from numpy import inf
 
-
-# Add for sure: ReLU (Max), L2, MSE (not ideal but not much other choice), Mini_batch matrix
+# Add for sure    : ReLU (Max), L2, MSE (not ideal but not much other choice), Mini_batch matrix
 # Maybe: Momentum, Dropout
 # Future: Softmax + ReLU, perhaps?
+error_list_training = []
+error_list_validation = []
+
 def load_data():
     """Return the MNIST data as a tuple containing the training data,
     the validation data, and the test data.
@@ -82,55 +86,109 @@ def vectorized_result(j):
     return e
 
 
+# logging.disable(10)
 class NeuralNetwork:
-    def __init__(self, layers, learningrate=0, lmb=0, sample_size=0, training_data=0, epochs=0, probability=0.5):
+    def __init__(self, layers, learningrate=0.0, lmb=0.0, sample_size=0, training_data=0, epochs=0, probability=0.5):
         self.layers = layers
         self.learningrate = learningrate
         self.sample_size = sample_size
         self.lmb = lmb
         self.epochs = epochs
-        self.probability = probability
-        self.weights = [.1 * np.random.randn(layers[i + 1], layers[i]) for i in range(0, len(layers) - 1)]
-        self.biases = [np.random.randn(layers[i]) for i in range(1, len(layers))]  # Problematic?
+        self.dropout_probability = probability
+        self.weights = [.1 * np.random.random_sample((layers[i + 1], layers[i])) for i in range(0, len(layers) - 1)]
+        self.biases = [np.random.randn(layers[i]) for i in
+                       range(1, len(layers))]  # Problematic?  No biases for input layer
+        self.training_data = training_data
 
-        # for j in range(0,epochs) :
-        #   np.random.shuffle(training_data)
-        #  for i in len(training_data):
-        #     tdarray = np.array(training_data[i:i+sample_size])
-        #    self.train(tdarray)
+    def train(self):
+        for j in range(0, self.epochs + 1):
+            np.random.shuffle(self.training_data)
+            for i in range(0, len(self.training_data), self.sample_size):
+                print("Epoch number: " + str(j) + "," + "Mini-batch number:" + str(i))
+                tdarray = np.array(self.training_data[i:i + self.sample_size])
+                if len(tdarray) < self.sample_size:
+                    break
+                self.backprop(tdarray)
+                # print("Epoch number " + str(j) + " complete")
+            error_list_training.append(accuracy_test(self,t))
+            error_list_validation.append(accuracy_test(self,v))
+        if self.dropout_probability is not None and self.dropout_probability < 1.0:
+            for weight_layer in self.weights:
+                weight_layer *= 1 - self.dropout_probability
+                # plt.show()
+        plt.plot(error_list_training, 'r-', error_list_validation, 'b-')
+        plt.show()
 
-    def run(self, inp, randM=None):
+    def run(self, inp, dropout=None):
         activations = []
         activations.append(inp)
         for i in range(0, len(self.weights)):
             activations.append(self.max(activations[i] @ np.transpose(self.weights[i]) + self.biases[i]))
-            if randM is not None:
-                activations[i] *= randM[i]
+            if 0 < i < len(self.weights) and dropout is not None:  # Dropping out only the hidden layers
+                activations[i] *= dropout[i]
         return activations
 
-    def train(self, td):
-        inputs = np.array([example[0] for example in td])
-        outputs = np.array([example[1] for example in td])
-        randM = [np.random.binomial(1, self.probability, size=(np.shape(self.layers[i - 1], self.layers[i]))) for i in
-                 range(len(self.layers), 1, -1)]
-        activations = np.array(self.run(inputs), randM)
+    def backprop(self, td):
+        inputs = np.column_stack(np.array(td).transpose()[0]).transpose()
+        outputs = np.column_stack(np.array(td).transpose()[1]).transpose()
+        randM = [np.random.binomial(1, self.dropout_probability, size=(self.sample_size, self.layers[i])) for i in
+                 range(len(self.layers) - 2, 0, -1)]
+        randM.append(np.ones(shape=(self.sample_size, self.layers[-1])))
+        randM.insert(0, np.ones(shape=(self.sample_size, self.layers[0])))
+        activations = self.run(inputs, dropout=randM)
         # Below part is where bias gradient is calculated
         del_b = []
-        del_b.append((1 / activations[-1].size) * (activations[-1] - outputs[-1]) * self.max_prime(activations[-1]))  # Bias change of output with Hadamard, hopefully?
-        del_b.extend([(np.transpose(self.weights[i]) @ np.tile(del_b[i].transpose(), (self.layers[i], 1))) * randM[i] for i
-                 in range(self.layers, 1,
-                          -1)])  # bias for hidden layers...what to do about input layer? Also extend vs append
+        del_b.append((1 / activations[-1][0].size) * (activations[-1] - outputs) * np.vectorize(self.max_prime)(
+                activations[-1]))  # Bias change of output with Hadamard, hopefully?
+        for i in range(len(self.layers) - 2, 0, -1):
+            del_b.append(
+                    (del_b[len(self.layers) - 2 - i] @ self.weights[i]) * np.vectorize(self.max_prime)(activations[i]))
+            # bias for hidden layers, no need to multiply by dropout matrix because the matrix is in activations(?) Also extend vs append
         # remember to divide sum by number of NONZERO entries
         # now for the weights
+        del_b = list(reversed(del_b))
         # Multiply activation matrix by del_b matrix, hopefully the zeros in del_b will replace the Hadamard 1's and 0's matrix
-        del_w = [activations[i] @ del_b[i] for i in
-                 range(self.layers, 1, -1)]  # don't forget to divide by # of nonzero weights
-        # TODO: Divide del_w by the number of nonzero entries to get avg gradient
-        # TODO: Update the weights and biases, taking into account L2
+        del_w = [((del_b[i]*randM[i+1]).transpose() @ activations[i]) for i,_ in
+                enumerate(del_b)]  # don't forget to divide by sample size, you just removed that
+        # avg = [1/((randM[i].transpose() @ randM[i + 1]).transpose()) for i in
+        # range(len(randM) - 1)]
+        #for i in range(0,len(randM)-1):
+         #   for row,column in zip(randM[i],randM[i+1]):
+          #      row = row.reshape(1,row.shape[0])
+           #     column = column.reshape(column.shape[0],1)
+            #    thing = column@row
+        weights_dropout = [[column.reshape(column.shape[0],1) @ row.reshape(1,row.shape[0]) for row,column in zip(randM[i],randM[i+1])] for i in
+                           range(0,len(randM)-1)]  # This is probably completely incorrect
+        for i in range(len(weights_dropout)):
+            weights_dropout[i] = 1 / (add_arrays(weights_dropout[i]))
+            weights_dropout[i][np.isinf(weights_dropout[i])] = 0
+            del_w[i] = del_w[i]*weights_dropout[i]
+        # for index in avg:
+        # index[index >= 1000000] = 0
+        # del_w = [avg[i] * del_w[i] for i in range(0, len(del_w))]
+        del_b = [np.array(np.sum(del_b[i], axis=0)) * 1 / (np.array(np.sum(randM[i + 1], axis=0))) for i in
+                 range(len(del_b))]  # Don't know if that last part is strictly necessary...
+        # del_b = [(1/self.sample_size)*np.sum(del_b[i],axis=0) for i in range(len(del_b))]
+        for layer in del_b:
+            layer[np.isnan(layer)] = 0
+        if (np.isnan(del_b[0])).any() == True:
+            os.system("pause")
+        self.weights = [
+            (self.weights[i] - (self.learningrate) * del_w[i] - (
+            self.lmb / math.floor(len(self.training_data) / self.sample_size)) *
+            self.weights[
+                i]) for i in range(0, len(self.weights))]
+        self.biases = [self.biases[i] - (self.learningrate) * del_b[i] for i in range(len(self.biases))]
+        # global error_list
+        # error_list.append(self.mean_squared_error(activations[-1],outputs[-1]))
+        # plt.plot(error_list)
 
     def sigmoid(self, z):
-        f = [1 / (1 + np.e ** -i) for i in z]
+        f = 1 / (1 + np.e ** -z)
         return f
+
+    def sigmoid_prime(self, z):
+        return (self.sigmoid(z)) * (1 - self.sigmoid(z))
 
     def max(self, z):
         f = .5 * (z + abs(z))
@@ -150,7 +208,7 @@ class NeuralNetwork:
         return (1 / o.size) * np.sum(np.nan_to_num(-e * np.log(o) - (1 - e) * np.log(1 - o)))
 
     def mean_squared_error(self, o, e):
-        return (.5 / o.size) * np.sum((o - e) ^ 2)
+        return (.5 / o.shape[0]) * np.sum(np.sum((o - e) ** 2, axis=1) * 1 / self.sample_size)
 
     def generate_rand_matrix(self, arr, p):
         matrix = [[1 if np.random.rand() < p else 0 for elem in row] for row in np.zeros[arr.shape]]
@@ -158,6 +216,40 @@ class NeuralNetwork:
 
     def write(self, link):
         np.savetxt(link, self.biases[0], delimiter=",")
+
+def dropout_weight_reduce(net):
+        for weight_layer in net.weights:
+                weight_layer *= 1 - net.dropout_probability
+        return net
+
+def add_arrays(arrays):
+    x = np.zeros(arrays[0].shape)
+    for i,_ in enumerate(arrays):
+        x = x + arrays[i]
+    return x
+def load_data_from_file(link):
+    f = open(link, 'r')
+    raw_data = [str.rstrip("\n").split(";") for str in f.readlines()]
+    input_data = np.array([[np.array(float(index)) for index in tset[0].split(',')] for tset in raw_data])
+    for set in input_data:
+        set = set.transpose()
+    output_data = np.array([float(tset[1]) for tset in raw_data])
+    final_data = list(zip(input_data, output_data))
+    # final_data.append(input_data)
+    # final_data.append(output_data)
+    f.close()
+    return final_data
+
+
+def accuracy_test(net, v):
+    num_correct = 0
+    for tset in v:
+        output = net.run(np.array(tset[0]).transpose())[-1]
+        max_index = np.argmax(output)
+        if max_index == np.argmax(tset[1]):
+            num_correct += 1  # Misleading, but error actually tracks number correct
+    return (float(num_correct) / float(len(v)))
+
 
 # print (n.weights)
 # print (n.biases)
@@ -167,12 +259,27 @@ class NeuralNetwork:
 # print (output)
 # print ("Time: " + str(time.time() - startime))
 t, v, test = load_data_wrapper()
-
 # plot.imshow(t[1].reshape((28,28)), cmap=cm.Greys_r)
 # plot.show()
 # print('The input' + str(t[0][0]))
-n = NeuralNetwork([2, 2, 3])
-# print(n.run(np.array([[0.0,1.0],[1.0,0.0],[1.0,1.0]])))
+# val_data = np.array(np.column_stack(v).transpose()[0]).transpose()
+# print(val_data)
+#print(v[0])
+#toy_set = load_data_from_file('test.txt')
+n = NeuralNetwork([784,50,10], 0.005, 0.1, 30, t, 200, 1.0)
+#print("Initial training set accuracy is: " + str(accuracy_test(n, t)))
+#print("Initial validation set accuracy is: " + str(accuracy_test(n, v)))
+start_time = time.time()
+print("Starting...")
+n.train()
+print("Time taken: " + str(time.time() - start_time) + "seconds")
+#print(n.run(toy_set[0][0].transpose()))
+#print(n.weights)
 # print("Biases:")
-# print([np.transpos# e(bias) for bias in n.biases])
-n.write('file.csv')
+# TODO: Try to check in-sample data to see overfitting
+# TODO: Check the graph of validation error at end, and maybe per epoch
+# TODO: Worst comes to worst, implement sigmoid
+# TODO: Don't forget to modify delta for multiple hidden layers, you didn't take dropout into account
+# print([np.transpos# e(bias) for bias in n.biases]
+print("Accuracy rate of training set is: " + str(accuracy_test(n, t)))
+print("Accuracy rate of validation set is:  " + str(accuracy_test(n, v)))

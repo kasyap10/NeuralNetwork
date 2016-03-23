@@ -6,9 +6,12 @@ import gzip
 import pickle
 import matplotlib.cm as cm
 import matplotlib.pyplot as plt
+import matplotlib.image as mpimg
 import os
-import logging
-from numpy import inf
+from skimage import color
+import pdb
+import openpyxl
+from openpyxl import load_workbook
 
 # Add for sure    : ReLU (Max), L2, MSE (not ideal but not much other choice), Mini_batch matrix
 # Maybe: Momentum, Dropout
@@ -74,7 +77,8 @@ def load_data_wrapper():
 	validation_results = [vectorized_result(y) for y in va_d[1]]
 	validation_data = np.array(list(zip(validation_inputs, validation_results)))
 	test_inputs = [np.reshape(x, (784, 1)) for x in te_d[0]]
-	test_data = np.array(list(zip(test_inputs, te_d[1])))
+	test_results = [vectorized_result(y) for y in te_d[1]]
+	test_data = np.array(list(zip(test_inputs, test_results)))
 	return (training_data, validation_data, test_data)
 
 
@@ -90,27 +94,23 @@ def vectorized_result(j):
 
 # logging.disable(10)
 class NeuralNetwork:
-	def __init__(self, layers, learningrate=0.0, lmb=0.0, sample_size=0, training_data=0, epochs=0, probability=0.5, momentum=0.0):
-		self.layers = layers
+	def __init__(self, layers=None, learningrate=0.0, lmb=0.0, sample_size=0, training_data=0, epochs=0, probability=0.5, momentum=0.0):
+		if layers != None:
+			generate_layer(layers)
 		self.learningrate = learningrate
 		self.sample_size = sample_size
 		self.lmb = lmb
 		self.epochs = epochs
 		self.momentum = momentum
 		self.dropout_probability = probability
-		self.weights = [.0001 * np.random.random_sample((layers[i + 1], layers[i])) for i in range(0, len(layers) - 1)]
-		self.biases = [.0001*np.random.random_sample(layers[i]) for i in
-					   range(1, len(layers))]  # Problematic?  No biases for input layer
 		self.training_data = training_data
-		v_prime = [np.zeros((layers[i+1],layers[i])) for i in range(0, len(layers)-1)]
-		self.v_prime = v_prime
-
 
 	def train(self):
 		for j in range(0, self.epochs + 1):
 			np.random.shuffle(self.training_data)
+			print("Epoch number: " + str(j))
 			for i in range(0, len(self.training_data), self.sample_size):
-				print("Epoch number: " + str(j) + "," + "Mini-batch number:" + str(i))
+				#print("Epoch number: " + str(j) + "," + "Mini-batch number:" + str(i))
 				tdarray = np.array(self.training_data[i:i + self.sample_size])
 				if len(tdarray) < self.sample_size:
 					break
@@ -157,8 +157,6 @@ class NeuralNetwork:
 		self.v_prime = [self.momentum*self.v_prime[i] -
 				   self.learningrate*del_w[i] for i in
 				   range(0,len(self.weights))]
-
-
 		self.weights = [
 			self.weights[i] + self.v_prime[i]  - (
 			self.lmb / math.floor(len(self.training_data) / self.sample_size)) *
@@ -169,17 +167,18 @@ class NeuralNetwork:
 		# error_list.append(self.mean_squared_error(activations[-1],outputs[-1]))
 		# plt.plot(error_list)
 
-	def sigmoid(self, z):
-		f = 1 / (1 + np.e ** -z)
-		return f
-
-	def show_results(self, t):
-         for tset in t:
-             output = self.run(np.array(tset[0]).transpose())[-1]
-             maxindex = np.argmax(output)
-             actual = np.argmax(tset[1])
-             print("Output: " + str(output) + "Actual: " + str(actual))
-
+	def show_results(self, t, full_output = False):
+		for tset in t:
+			output = self.run(np.array(tset[0]).transpose())[-1]
+			maxindex = np.argmax(output)
+			actual = np.argmax(tset[1])
+			print("Output: " + str(maxindex) + "Actual: " + str(actual))
+	
+	def make_layers(self, layer):
+		self.weights = [.0001 * np.random.random_sample((layer[i + 1], layer[i])) for i in range(0, len(layer) - 1)]
+		self.biases = [.0001*np.random.random_sample(layer[i]) for i in range(1, len(layer))]
+		v_prime = [np.zeros((layer[i+1],layer[i])) for i in range(0, len(layer)-1)]
+		self.v_prime = v_prime
 
 	def max(self, z):
 		f = .5 * (z + abs(z))
@@ -191,33 +190,36 @@ class NeuralNetwork:
 		else:
 			return 0
 
-	def softplus(self, z):
-		f = np.log(np.exp(z) + 1)
-		return f
-
-	def cross_entropy(self, o, e):
-		return (1 / o.size) * np.sum(np.nan_to_num(-e * np.log(o) - (1 - e) * np.log(1 - o)))
-
 	def mean_squared_error(self, o, e):
 		return (.5 / o.shape[0]) * np.sum(np.sum((o - e) ** 2, axis=1) * 1 / self.sample_size)
 
-	def generate_rand_matrix(self, arr, p):
-		matrix = [[1 if np.random.rand() < p else 0 for elem in row] for row in np.zeros[arr.shape]]
-		return matrix
+	def save(self, link):
+		wb = openpyxl.Workbook()
+		wb.remove_sheet(wb.get_sheet_by_name('Sheet'))
+		for i in range(len(self.weights)):
+			layer_name = "Weight matrix " + str(i+1)
+			wb.create_sheet(index=i, title=layer_name)
+			for j in range(self.weights[i].shape[0]):
+				for k in range(self.weights[i].shape[1]):
+					#pdb.set_trace()
+					wb.get_sheet_by_name(layer_name).cell(row=(j+1), column=(k+1)).value = self.weights[i][j][k]
+		wb.create_sheet(index=len(self.weights), title="Biases")
+		for i in range(len(self.biases)):
+			for j in range(len(self.biases[i])):
+				wb.get_sheet_by_name("Biases").cell(row=(i+1), column=(j+1)).value = self.biases[i][j]
+		wb.save(link)
 
-	def write(self, link):
-		np.savetxt(link, self.biases[0], delimiter=",")
+	def load(self, link):
+		wb = openpyxl.load_workbook(link, use_iterators=True)
+		sheets = list(wb.worksheets)
+		layers = [sheets[i].get_highest_row for i in range(len(sheets) - 1)]
+		layers.append(wb.worksheets[-2].get_highest_column())
+		pdb.set_trace()
+		self.make_layers(layers)
+		self.weights = [[[float(sheets[i].cell(row=(j+1), column=(k+1)).value) for k in range(self.weights[i].shape[1])] for j in range(self.weights[i].shape[0])] for i in range(len(sheets) - 1)]
+		self.biases = [row for row in sheets[-1].iter_rows]
 
-def dropout_weight_reduce(net):
-		for weight_layer in net.weights:
-				weight_layer *= 1 - net.dropout_probability
-		return net
 
-def add_arrays(arrays):
-	x = np.zeros(arrays[0].shape)
-	for i,_ in enumerate(arrays):
-		x = x + arrays[i]
-	return x
 def load_data_from_file(link):
 	f = open(link, 'r')
 	raw_data = [str.rstrip("\n").split(";") for str in f.readlines()]
@@ -231,7 +233,6 @@ def load_data_from_file(link):
 	f.close()
 	return final_data
 
-
 def accuracy_test(net, v):
 	num_correct = 0
 	for tset in v:
@@ -240,6 +241,14 @@ def accuracy_test(net, v):
 		if max_index == np.argmax(tset[1]):
 			num_correct += 1  # Misleading, but error actually tracks number correct
 	return (float(num_correct) / float(len(v)))
+
+def image_to_vector(file):
+	vector = []
+	img = color.rgb2gray(mpimg.imread(file))
+	for i in range(img.shape[0]):
+		for j in range(img.shape[1]):
+			vector.append(float(1.0 - img[i][j]))
+	return np.array(vector)
 
 
 # print (n.weights)
@@ -250,21 +259,23 @@ def accuracy_test(net, v):
 # print (output)
 # print ("Time: " + str(time.time() - startime))
 t, v, test = load_data_wrapper()
-# plot.imshow(t[1].reshape((28,28)), cmap=cm.Greys_r)
-# plot.show()
+#plt.imshow(t[3][0].reshape((28,28)), cmap=cm.Greys_r)
+#plt.show()
 # print('The input' + str(t[0][0]))
 # val_data = np.array(np.column_stack(v).transpose()[0]).transpose()
 # print(val_data)
-#print(v[0])
+#print(v[0][0])
 #toy_set = load_data_from_file('test.txt')
-n = NeuralNetwork([784,100,10], 0.005, 0.0, 20, t, 200, 1.0, 0.5)
+n = NeuralNetwork([784,100,10], 0.005, 0.0, 20, t, 100, 1.0, 0.5)
 #print("Initial training set accuracy is: " + str(accuracy_test(n, t)))
 #print("Initial validation set accuracy is: " + str(accuracy_test(n, v)))
-print("Starting...")
+#print("Starting...")
 n.train()
-#print(n.run(toy_set[0][0].transpose()))
-#print(n.weights)
-# print("Biases:")
+four_image = image_to_vector("4.png").reshape((784,1))
+five_image = image_to_vector("5.png").reshape((784,1))
+six_image = image_to_vector("6.png").reshape((784,1))
+#plt.imshow(six_image.reshape((28,28)), cmap=cm.Greys_r)
+#plt.show()
 # TODO: Try to check in-sample data to see overfitting
 # TODO: Check the graph of validation error at end, and maybe per epoch
 # TODO: Worst comes to worst, implement sigmoid
@@ -272,4 +283,12 @@ n.train()
 # print([np.transpos# e(bias) for bias in n.biases]
 print("Accuracy rate of training set is: " + str(accuracy_test(n, t)))
 print("Accuracy rate of validation set is:  " + str(accuracy_test(n, v)))
-n.show_results(v)
+print("Accuracy rate of test set is: " + str(accuracy_test(n, test)))
+four_result = np.argmax(n.run(four_image.reshape(1,784))[-1])
+five_result = np.argmax(n.run(five_image.reshape(1,784))[-1])
+six_result = np.argmax(n.run(six_image.reshape(1,784))[-1])
+print(str(four_result))
+print(str(five_result))
+print(str(six_result))
+#n.show_results(v)
+n.load("save_file.xlsx")

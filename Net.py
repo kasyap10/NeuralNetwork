@@ -96,7 +96,7 @@ def vectorized_result(j):
 class NeuralNetwork:
 	def __init__(self, layers=None, learningrate=0.0, lmb=0.0, sample_size=0, training_data=0, epochs=0, probability=0.5, momentum=0.0):
 		if layers != None:
-			generate_layer(layers)
+			self.generate_layers(layers)
 		self.learningrate = learningrate
 		self.sample_size = sample_size
 		self.lmb = lmb

@@ -95,8 +95,9 @@ def vectorized_result(j):
 # logging.disable(10)
 class NeuralNetwork:
 	def __init__(self, layers=None, learningrate=0.0, lmb=0.0, sample_size=0, training_data=0, epochs=0, probability=0.5, momentum=0.0):
+		#pdb.set_trace()
 		if layers != None:
-			self.generate_layers(layers)
+			self.make_layers(layers)
 		self.learningrate = learningrate
 		self.sample_size = sample_size
 		self.lmb = lmb
@@ -106,6 +107,7 @@ class NeuralNetwork:
 		self.training_data = training_data
 
 	def train(self):
+		#pdb.set_trace()
 		for j in range(0, self.epochs + 1):
 			np.random.shuffle(self.training_data)
 			print("Epoch number: " + str(j))
@@ -134,6 +136,7 @@ class NeuralNetwork:
 		return activations
 
 	def backprop(self, td):
+		#pdb.set_trace()
 		inputs = np.column_stack(np.array(td).transpose()[0]).transpose()
 		outputs = np.column_stack(np.array(td).transpose()[1]).transpose()
 		activations = self.run(inputs)
@@ -175,6 +178,8 @@ class NeuralNetwork:
 			print("Output: " + str(maxindex) + "Actual: " + str(actual))
 	
 	def make_layers(self, layer):
+		#pdb.set_trace()
+		self.layers = layer
 		self.weights = [.0001 * np.random.random_sample((layer[i + 1], layer[i])) for i in range(0, len(layer) - 1)]
 		self.biases = [.0001*np.random.random_sample(layer[i]) for i in range(1, len(layer))]
 		v_prime = [np.zeros((layer[i+1],layer[i])) for i in range(0, len(layer)-1)]
@@ -212,12 +217,14 @@ class NeuralNetwork:
 	def load(self, link):
 		wb = openpyxl.load_workbook(link, use_iterators=True)
 		sheets = list(wb.worksheets)
-		layers = [sheets[i].get_highest_row for i in range(len(sheets) - 1)]
-		layers.append(wb.worksheets[-2].get_highest_column())
-		pdb.set_trace()
+		layers = [sheets[i].max_column for i in range(len(sheets) - 1)]
+		layers.append(wb.worksheets[-2].max_row)
 		self.make_layers(layers)
-		self.weights = [[[float(sheets[i].cell(row=(j+1), column=(k+1)).value) for k in range(self.weights[i].shape[1])] for j in range(self.weights[i].shape[0])] for i in range(len(sheets) - 1)]
-		self.biases = [row for row in sheets[-1].iter_rows]
+		#pdb.set_trace()
+		self.weights = [np.array([[cell.value for cell in row] for row in sheets[i].iter_rows()]) for i in range(len(sheets)-1)]
+		#weights = [[[float(sheets[i].cell(row=(j+1), column=(k+1)).value) 
+		#	for k in range(self.weights[i].shape[1])] for j in range(self.weights[i].shape[0])] for i in range(len(sheets) - 1)]
+		self.biases = [np.array([cell.value for cell in row if cell.value != None]) for row in sheets[-1].iter_rows()]
 
 
 def load_data_from_file(link):
@@ -266,29 +273,28 @@ t, v, test = load_data_wrapper()
 # print(val_data)
 #print(v[0][0])
 #toy_set = load_data_from_file('test.txt')
-n = NeuralNetwork([784,100,10], 0.005, 0.0, 20, t, 0, 1.0, 0.5)
+n = NeuralNetwork(learningrate=0.005, lmb=0.0, sample_size=20, training_data=t, epochs=100, 
+	probability=1.0, momentum=0.5)
 #print("Initial training set accuracy is: " + str(accuracy_test(n, t)))
 #print("Initial validation set accuracy is: " + str(accuracy_test(n, v)))
 #print("Starting...")
-n.train()
-four_image = image_to_vector("4.png").reshape((784,1))
-five_image = image_to_vector("5.png").reshape((784,1))
-six_image = image_to_vector("6.png").reshape((784,1))
+n.load("save_file.xlsx")
+print("Accuracy rate of training set is: " + str(accuracy_test(n, t)))
+#n.train()
+#four_image = image_to_vector("4.png").reshape((784,1))
+#five_image = image_to_vector("5.png").reshape((784,1))
+#six_image = image_to_vector("6.png").reshape((784,1))
 #plt.imshow(six_image.reshape((28,28)), cmap=cm.Greys_r)
 #plt.show()
-# TODO: Try to check in-sample data to see overfitting
-# TODO: Check the graph of validation error at end, and maybe per epoch
-# TODO: Worst comes to worst, implement sigmoid
-# TODO: Don't forget to modify delta for multiple hidden layers, you didn't take dropout into account
 # print([np.transpos# e(bias) for bias in n.biases]
 print("Accuracy rate of training set is: " + str(accuracy_test(n, t)))
 print("Accuracy rate of validation set is:  " + str(accuracy_test(n, v)))
 print("Accuracy rate of test set is: " + str(accuracy_test(n, test)))
-four_result = np.argmax(n.run(four_image.reshape(1,784))[-1])
-five_result = np.argmax(n.run(five_image.reshape(1,784))[-1])
-six_result = np.argmax(n.run(six_image.reshape(1,784))[-1])
-print(str(four_result))
-print(str(five_result))
-print(str(six_result))
+#four_result = np.argmax(n.run(four_image.reshape(1,784))[-1])
+#five_result = np.argmax(n.run(five_image.reshape(1,784))[-1])
+#six_result = np.argmax(n.run(six_image.reshape(1,784))[-1])
+#print(str(four_result))
+#print(str(five_result))
+#print(str(six_result))
 #n.show_results(v)
-n.load("save_file.xlsx")
+#n.save("save_file.xlsx")

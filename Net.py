@@ -94,21 +94,20 @@ def vectorized_result(j):
 
 # logging.disable(10)
 class NeuralNetwork:
-	def __init__(self, layers=None, learningrate=0.0, lmb=0.0, sample_size=0, training_data=0, epochs=0, probability=0.5, momentum=0.0):
+	def __init__(self, layers=None, learningrate=0.0, lmb=0.0, sample_size=0, training_data=0, probability=0.5, momentum=0.0):
 		#pdb.set_trace()
 		if layers != None:
 			self.make_layers(layers)
 		self.learningrate = learningrate
 		self.sample_size = sample_size
 		self.lmb = lmb
-		self.epochs = epochs
 		self.momentum = momentum
 		self.dropout_probability = probability
 		self.training_data = training_data
 
-	def train(self):
+	def train(self, epochs):
 		#pdb.set_trace()
-		for j in range(0, self.epochs + 1):
+		for j in range(0, epochs + 1):
 			np.random.shuffle(self.training_data)
 			print("Epoch number: " + str(j))
 			for i in range(0, len(self.training_data), self.sample_size):
@@ -134,6 +133,12 @@ class NeuralNetwork:
 		for i in range(0, len(self.weights)):
 			activations.append(self.max(activations[i] @ np.transpose(self.weights[i]) + self.biases[i]))
 		return activations
+
+	def run_inverse(self,inp):
+		activations = []
+		activation.append(inp)
+		for i in range(len(self.weights)-1, -1, -1):
+			activations.append(activations[i])
 
 	def backprop(self, td):
 		#pdb.set_trace()
@@ -194,6 +199,16 @@ class NeuralNetwork:
 			return 1
 		else:
 			return 0
+
+	def noisy_max(self,z):
+		f = .505*z + .495*abs(x)
+		return f
+
+	def noisy_max_prime(self,z):
+		if z > 0:
+			return 1
+		else:
+			return 0.01
 
 	def mean_squared_error(self, o, e):
 		return (.5 / o.shape[0]) * np.sum(np.sum((o - e) ** 2, axis=1) * 1 / self.sample_size)
@@ -273,28 +288,28 @@ t, v, test = load_data_wrapper()
 # print(val_data)
 #print(v[0][0])
 #toy_set = load_data_from_file('test.txt')
-n = NeuralNetwork(learningrate=0.005, lmb=0.0, sample_size=20, training_data=t, epochs=100, 
+n = NeuralNetwork(learningrate=0.005, lmb=0.0, sample_size=20, training_data=t, 
 	probability=1.0, momentum=0.5)
 #print("Initial training set accuracy is: " + str(accuracy_test(n, t)))
 #print("Initial validation set accuracy is: " + str(accuracy_test(n, v)))
 #print("Starting...")
 n.load("save_file.xlsx")
 print("Accuracy rate of training set is: " + str(accuracy_test(n, t)))
-#n.train()
-#four_image = image_to_vector("4.png").reshape((784,1))
-#five_image = image_to_vector("5.png").reshape((784,1))
-#six_image = image_to_vector("6.png").reshape((784,1))
+n.train(epochs=50)
+four_image = image_to_vector("4.png").reshape((784,1))
+five_image = image_to_vector("5.png").reshape((784,1))
+six_image = image_to_vector("6.png").reshape((784,1))
 #plt.imshow(six_image.reshape((28,28)), cmap=cm.Greys_r)
 #plt.show()
 # print([np.transpos# e(bias) for bias in n.biases]
 print("Accuracy rate of training set is: " + str(accuracy_test(n, t)))
 print("Accuracy rate of validation set is:  " + str(accuracy_test(n, v)))
 print("Accuracy rate of test set is: " + str(accuracy_test(n, test)))
-#four_result = np.argmax(n.run(four_image.reshape(1,784))[-1])
-#five_result = np.argmax(n.run(five_image.reshape(1,784))[-1])
-#six_result = np.argmax(n.run(six_image.reshape(1,784))[-1])
-#print(str(four_result))
-#print(str(five_result))
-#print(str(six_result))
+four_result = np.argmax(n.run(four_image.reshape(1,784))[-1])
+five_result = np.argmax(n.run(five_image.reshape(1,784))[-1])
+six_result = np.argmax(n.run(six_image.reshape(1,784))[-1])
+print(str(four_result))
+print(str(five_result))
+print(str(six_result))
 #n.show_results(v)
-#n.save("save_file.xlsx")
+n.save("save_file.xlsx")

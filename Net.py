@@ -1,4 +1,13 @@
+
+#TODO:
+#Implement run_in_reverse
+#Recheck dropout
+#Turn monitoring on/off
+
+
+#Imports statements
 import numpy as np
+from numpy.linalg import pinv
 import pdb
 import math
 import time
@@ -12,16 +21,10 @@ from skimage import color
 import openpyxl
 import abc
 import activation_functions
+from PIL import Image
 from openpyxl import load_workbook
 
-#TODO:
-#Implement the activation function interface 
-#Implement run_in_reverse
-#Turn monitoring on/off
-
-error_list_training = []
-error_list_validation = []
-
+#Data loading functions
 def load_data():
 	"""Return the MNIST data as a tuple containing the training data,
 	the validation data, and the test data.
@@ -49,7 +52,6 @@ def load_data():
 	training_data, validation_data, test_data = pickle.load(f, encoding='latin1')
 	f.close()
 	return (training_data, validation_data, test_data)
-
 
 def load_data_wrapper():
 	"""Return a tuple containing ``(training_data, validation_data,
@@ -84,7 +86,6 @@ def load_data_wrapper():
 	test_data = np.array(list(zip(test_inputs, test_results)))
 	return (training_data, validation_data, test_data)
 
-
 def vectorized_result(j):
 	"""Return a 10-dimensional unit vector with a 1.0 in the jth
 	position and zeroes elsewhere.  This is used to convert a digit
@@ -94,11 +95,18 @@ def vectorized_result(j):
 	e[j] = 1.0
 	return e
 
-
-# logging.disable(10)
+#Neural Network Main
 class NeuralNetwork:
+
+	#Main functions
 	def __init__(self, layers=None, activation_function=None, learningrate=0.0, lmb=0.0, sample_size=0, training_data=0, probability=0.5, momentum=0.0):
 		#pdb.set_trace()
+		#Global variables
+		global error_list_training
+		global error_list_validation
+		error_list_training = []
+		error_list_validation = []
+		
 		if layers != None:
 			self.make_layers(layers)
 		self.learningrate = learningrate
@@ -112,6 +120,42 @@ class NeuralNetwork:
 		else:
 			self.activation_function = activation_function
 
+	def run(self, inp, do_dropout=False):
+		#if do_dropout == True:
+		#	pdb.set_trace()
+		activations = []
+		activations.append(inp)
+		for i in range(0, len(self.weights)):
+			bernoulli_matrix = np.ones(shape=(activations[i] @ np.transpose(self.weights[i])).shape)
+			if 0 < i < len(self.weights):
+				if do_dropout == True:
+					#pdb.set_trace()
+					bernoulli_matrix = np.random.binomial(n=1,p=self.dropout_probability,size=(activations[i] @ np.transpose(self.weights[i])).shape)
+				else:
+					bernoulli_matrix = 1/(1-self.dropout_probability)
+			#pdb.set_trace()
+			activations.append(self.activation_function.fx((activations[i] @ np.transpose(self.weights[i]) + self.biases[i]))*bernoulli_matrix)
+		return activations
+				#Different things to try: multiply only max by bernoulli_matrix, multiply entire thing by matrix (so include biases),
+				#--> and try not to include the final layer
+				#activations.append(self.max((activations[i] @ np.transpose(self.weights[i]) + self.biases[i])))
+
+	def run_inverse(self,inp): #Note that inp here should be the output of the network
+		#The tricky thing is, n x m matrices don't have inverses, so we must take the pseudoinverse
+		#TODO: Must invertnot just the constant that I called the bernoulli matrix
+		activations = []
+		activations.append(inp)
+		ubound_weights = len(self.weights) - 1
+		for i in range(0, len(self.weights)):
+			#pdb.set_trace()
+			if i == ubound_weights:
+				inverse_bernoulli = 1
+			else:
+				inverse_bernoulli = (1- self.dropout_probability)
+			activations.append((self.activation_function.fx_inverse(activations[i]*(inverse_bernoulli))-
+				self.biases[ubound_weights - i]) @ pinv(np.transpose(self.weights[ubound_weights - i])))
+		return list(reversed(activations))
+
 	def train(self, epochs):
 		#pdb.set_trace()
 		for j in range(0, epochs + 1):
@@ -124,37 +168,11 @@ class NeuralNetwork:
 					break
 				self.backprop(tdarray)
 				# print("Epoch number " + str(j) + " complete")
-			print("Accuracy: " + str(accuracy_test(self,t)))
-			error_list_training.append(accuracy_test(self,t))
-			error_list_validation.append(accuracy_test(self,v))
+			print("Accuracy: " + str(accuracy_test(self,self.training_data)))
+			error_list_training.append(accuracy_test(self,self.training_data))
+			#error_list_validation.append(accuracy_test(self,v))
 		plt.plot(error_list_training, 'r-', error_list_validation, 'b-')
 		plt.show()
-
-	def run(self, inp, do_dropout=False):
-		#if do_dropout == True:
-		#	pdb.set_trace()
-		activations = []
-		activations.append(inp)
-		for i in range(0, len(self.weights)):
-			bernoulli_matrix = np.ones(shape=(activations[i] @ np.transpose(self.weights[i])).shape)
-			if 0 < i < (len(self.weights) - 1):
-				if do_dropout == True:
-					#pdb.set_trace()
-					bernoulli_matrix = np.random.binomial(n=1,p=self.dropout_probability,size=(activations[i] @ np.transpose(self.weights[i])).shape)
-				else:
-					bernoulli_matrix = 1/(1-self.dropout_probability)
-			activations.append(self.activation_function.activation_function((activations[i] @ np.transpose(self.weights[i]) + self.biases[i]))*bernoulli_matrix)
-		return activations
-				#Different things to try: multiply only max by bernoulli_matrix, multiply entire thing by matrix (so include biases),
-				#--> and try not to include the final layer
-				#activations.append(self.max((activations[i] @ np.transpose(self.weights[i]) + self.biases[i])))
-
-
-	def run_inverse(self,inp):
-		activations = []
-		activation.append(inp)
-		for i in range(len(self.weights)-1, -1, -1):
-			activations.append(activations[i])
 
 	def backprop(self, td):
 		#pdb.set_trace()
@@ -166,11 +184,11 @@ class NeuralNetwork:
 		activations = self.run(inputs, do_dropout)
 		# Below part is where bias gradient is calculated
 		del_b = []
-		del_b.append((1 / activations[-1][0].size) * (activations[-1] - outputs) * np.vectorize(self.activation_function.activation_prime)(
+		del_b.append((1 / activations[-1][0].size) * (activations[-1] - outputs) * np.vectorize(self.activation_function.fx_prime)(
 				activations[-1]))  # Bias change of output with Hadamard, hopefully?
 		for i in range(len(self.layers) - 2, 0, -1):
 			del_b.append(
-					(del_b[len(self.layers) - 2 - i] @ self.weights[i]) * np.vectorize(self.activation_function.activation_prime)(activations[i]))
+					(del_b[len(self.layers) - 2 - i] @ self.weights[i]) * np.vectorize(self.activation_function.fx_prime)(activations[i]))
 			# bias for hidden layers, no need to multiply by dropout matrix because the matrix is in activations(?) Also extend vs append
 		# remember to divide sum by number of NONZERO entries
 		# now for the weights
@@ -209,9 +227,6 @@ class NeuralNetwork:
 		v_prime = [np.zeros((layer[i+1],layer[i])) for i in range(0, len(layer)-1)]
 		self.v_prime = v_prime
 
-	def mean_squared_error(self, o, e):
-		return (.5 / o.shape[0]) * np.sum(np.sum((o - e) ** 2, axis=1) * 1 / self.sample_size)
-
 	def save(self, link):
 		wb = openpyxl.Workbook()
 		wb.remove_sheet(wb.get_sheet_by_name('Sheet'))
@@ -240,6 +255,7 @@ class NeuralNetwork:
 		#	for k in range(self.weights[i].shape[1])] for j in range(self.weights[i].shape[0])] for i in range(len(sheets) - 1)]
 		self.biases = [np.array([cell.value for cell in row if cell.value != None]) for row in sheets[-1].iter_rows()]
 
+#Miscellaneous functions
 def accuracy_test(net, v):
 	num_correct = 0
 	for tset in v:
@@ -257,37 +273,13 @@ def image_to_vector(file):
 			vector.append(float(1.0 - img[i][j]))
 	return np.array(vector)
 
+def show_vector_to_image(vector, shape):
+	arr = vector.reshape(shape)
+	plt.imshow(arr, cmap=cm.Greys_r)
+	plt.show()
 
-t, v, test = load_data_wrapper()
-#plt.imshow(t[3][0].reshape((28,28)), cmap=cm.Greys_r)
-#plt.show()
-# print('The input' + str(t[0][0]))
-# val_data = np.array(np.column_stack(v).transpose()[0]).transpose()
-# print(val_data)
-#print(v[0][0])
-#toy_set = load_data_from_file('test.txt')
-n = NeuralNetwork(layers=[784,30,10],learningrate=0.005, lmb=0.0, sample_size=20, training_data=t, 
-	probability=0.5, momentum=0.5)
-#print("Initial training set accuracy is: " + str(accuracy_test(n, t)))
-#print("Initial validation set accuracy is: " + str(accuracy_test(n, v)))
-#print("Starting...")d
-#n.load("save_file.xlsx")
-print("Accuracy rate of training set is: " + str(accuracy_test(n, t)))
-n.train(epochs=100)
-four_image = image_to_vector("4.png").reshape((784,1))
-five_image = image_to_vector("5.png").reshape((784,1))
-six_image = image_to_vector("6.png").reshape((784,1))
-#plt.imshow(six_image.reshape((28,28)), cmap=cm.Greys_r)
-#plt.show()
-# print([np.transpos# e(bias) for bias in n.biases]
-print("Accuracy rate of training set is: " + str(accuracy_test(n, t)))
-print("Accuracy rate of validation set is:  " + str(accuracy_test(n, v)))
-print("Accuracy rate of test set is: " + str(accuracy_test(n, test)))
-four_result = np.argmax(n.run(four_image.reshape(1,784))[-1])
-five_result = np.argmax(n.run(five_image.reshape(1,784))[-1])
-six_result = np.argmax(n.run(six_image.reshape(1,784))[-1])
-print(str(four_result))
-print(str(five_result))
-print(str(six_result))
-#n.show_results(v)
-#n.save("save_file.xlsx")
+def save_vector_to_image(vector, shape, file):
+	arr = vector.reshape(shape)
+	arr8 = (((arr - arr.min()) / (arr.max() - arr.min())) * 255.9).astype(np.uint8)
+	im = Image.fromarray(arr8)
+	im.save(file)
